@@ -549,12 +549,15 @@ function App() {
     null
   const budgetLimit = activeBudget ? toNumber(activeBudget.monthlyLimit) : toNumber(session.monthlyBudget)
   const budgetProgress = budgetLimit > 0 ? clamp((totalExpense / budgetLimit) * 100, 0, 160) : 0
-  const budgetAdherenceScore = budgetLimit > 0 ? clamp(100 - Math.max(0, budgetProgress - 100), 0, 100) : 70
+  const hasHealthData = totalIncome > 0 || totalExpense > 0 || budgetLimit > 0
+  const budgetAdherenceScore = budgetLimit > 0 ? clamp(100 - Math.max(0, budgetProgress - 100), 0, 100) : 0
   const expenseToIncomeScore =
-    totalIncome > 0 ? clamp(100 - Math.max(0, (totalExpense / totalIncome) * 100 - 100), 0, 100) : 30
-  const financialHealthScore = Math.round(
-    clamp((clamp(savingsRate, 0, 100) * 0.4) + (budgetAdherenceScore * 0.4) + (expenseToIncomeScore * 0.2), 0, 100),
-  )
+    totalIncome > 0 ? clamp(100 - Math.max(0, (totalExpense / totalIncome) * 100 - 100), 0, 100) : 0
+  const financialHealthScore = hasHealthData
+    ? Math.round(
+      clamp((clamp(savingsRate, 0, 100) * 0.4) + (budgetAdherenceScore * 0.4) + (expenseToIncomeScore * 0.2), 0, 100),
+    )
+    : null
 
   const breakdownMap = {}
   for (const expense of monthlyExpenses) {
@@ -1800,8 +1803,12 @@ function App() {
             </article>
             <article className="metric-card accent">
               <span>Health score</span>
-              <strong>{financialHealthScore}/100</strong>
-              <small>Built from savings, budget adherence, and spend ratio</small>
+              <strong>{financialHealthScore === null ? '--' : `${financialHealthScore}/100`}</strong>
+              <small>
+                {financialHealthScore === null
+                  ? 'Start adding income, expense, or a budget to generate your score'
+                  : 'Built from savings, budget adherence, and spend ratio'}
+              </small>
             </article>
           </section>
 
