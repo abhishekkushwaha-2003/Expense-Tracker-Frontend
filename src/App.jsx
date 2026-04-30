@@ -6,7 +6,7 @@ const SESSION_KEY = 'spendsmart.session'
 const USERS_KEY = 'spendsmart.known-users'
 const THEME_KEY = 'spendsmart.theme'
 
-const navItems = [
+const userNavItems = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'expenses', label: 'Expenses' },
   { id: 'income', label: 'Income' },
@@ -16,6 +16,14 @@ const navItems = [
   { id: 'profile', label: 'Profile' },
 ]
 
+const adminNavItems = [
+  { id: 'dashboard', label: 'Overview' },
+  { id: 'users', label: 'Users' },
+  { id: 'transactions', label: 'Transactions' },
+  { id: 'broadcast', label: 'Broadcast' },
+  { id: 'audit', label: 'Audit Logs' },
+]
+
 const paymentMethods = ['CASH', 'CARD', 'UPI', 'BANK', 'WALLET']
 const expenseTypes = ['EXPENSE', 'SPLIT']
 const categoryTypes = ['EXPENSE', 'INCOME']
@@ -23,6 +31,9 @@ const recurringTypes = ['EXPENSE', 'INCOME']
 const recurringFrequencies = ['DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY']
 const incomeSources = ['Salary', 'Freelance', 'Business', 'Investment', 'Gift', 'Other']
 const supportedCurrencies = ['INR', 'USD', 'EUR', 'GBP']
+const supportedTimezones = typeof Intl.supportedValuesOf === 'function'
+  ? Intl.supportedValuesOf('timeZone')
+  : ['Asia/Kolkata', 'Asia/Calcutta', 'Asia/Dubai', 'Europe/London', 'America/New_York', 'UTC']
 
 const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -79,12 +90,19 @@ const emptyRecurringForm = {
 const emptyAuthForm = {
   fullName: '',
   email: '',
-  passwordHash: '',
+  password: '',
   otp: '',
 }
 
 const emptyProfileForm = {
+  currency: 'INR',
+  timezone: 'Asia/Kolkata',
   monthlyBudget: '',
+}
+
+const emptyBroadcastForm = {
+  title: '',
+  message: '',
 }
 
 const defaultRecurringAccess = {
@@ -149,6 +167,18 @@ function formatTimezoneLabel(timezone) {
   }
 
   return timezone.replace('Asia/Calcutta', 'Asia/Kolkata')
+}
+
+function defaultTimezone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'
+}
+
+function isUserActive(user) {
+  if (typeof user?.isActive === 'boolean') {
+    return user.isActive
+  }
+
+  return String(user?.status || '').toLowerCase() === 'active'
 }
 
 function buildMonthWindow(size) {
@@ -299,8 +329,9 @@ function App() {
     fullName: '',
     userId: '',
     currency: 'INR',
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+    timezone: defaultTimezone(),
     monthlyBudget: '',
+    role: 'user',
   })
 
   const [activeSection, setActiveSection] = useState('dashboard')
@@ -338,9 +369,18 @@ function App() {
   const [recurringForm, setRecurringForm] = useState(emptyRecurringForm)
   const [profileForm, setProfileForm] = useState({
     ...emptyProfileForm,
+    currency: rememberedSession.currency || 'INR',
+    timezone: rememberedSession.timezone || defaultTimezone(),
     monthlyBudget: rememberedSession.monthlyBudget || '',
   })
+  const [broadcastForm, setBroadcastForm] = useState(emptyBroadcastForm)
   const [recurringAccess, setRecurringAccess] = useState(defaultRecurringAccess)
+  const [adminRecords, setAdminRecords] = useState({
+    overview: null,
+    users: [],
+    transactions: [],
+    auditLogs: [],
+  })
   const sessionRef = useRef(rememberedSession)
   const [expenseFilters, setExpenseFilters] = useState({
     keyword: '',
@@ -360,6 +400,7 @@ function App() {
   const currentCurrency = session.currency || 'INR'
   const currentTimezone = formatTimezoneLabel(session.timezone)
   const currentMonthWindow = buildMonthWindow(6)
+  const visibleNavItems = session.role === 'admin' ? adminNavItems : userNavItems
 
   useEffect(() => {
     window.localStorage.setItem(SESSION_KEY, JSON.stringify(session))
@@ -378,9 +419,11 @@ function App() {
 
   useEffect(() => {
     setProfileForm({
+      currency: session.currency || 'INR',
+      timezone: session.timezone || defaultTimezone(),
       monthlyBudget: session.monthlyBudget || '',
     })
-  }, [session.monthlyBudget])
+  }, [session.currency, session.monthlyBudget, session.timezone])
 
   async function loadAllData() {
     if (!session.userId) {
@@ -417,7 +460,7 @@ function App() {
           ...currentSession,
           fullName: profile.fullName || currentSession.fullName,
           currency: profile.currency || currentSession.currency || 'INR',
-          timezone: profile.timezone || currentSession.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+          timezone: profile.timezone || currentSession.timezone || defaultTimezone(),
           monthlyBudget: profile.monthlyBudget || '',
         }
 
@@ -451,11 +494,44 @@ function App() {
     }
   }
 
+  async function loadAdminData() {
+    if (session.role !== 'admin' || !session.token) {
+      return
+    }
+
+    setIsBusy(true)
+    setErrorMessage('')
+
+    try {
+      const [overview, users, transactions, auditLogs] = await Promise.all([
+        apiRequest('/admin/overview', {}, session.token).catch(() => null),
+        apiRequest('/admin/users', {}, session.token).catch(() => []),
+        apiRequest('/admin/transactions', {}, session.token).catch(() => []),
+        apiRequest('/admin/audit-logs', {}, session.token).catch(() => []),
+      ])
+
+      startTransition(() => {
+        setAdminRecords({
+          overview,
+          users,
+          transactions,
+          auditLogs,
+        })
+      })
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to load admin data right now.')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   useEffect(() => {
-    if (session.userId) {
+    if (session.role === 'admin' && session.token) {
+      loadAdminData()
+    } else if (session.userId) {
       loadAllData()
     }
-  }, [session.userId, session.token, refreshToken])
+  }, [session.role, session.userId, session.token, refreshToken])
 
   const categoriesById = Object.fromEntries(records.categories.map((category) => [category.categoryId, category]))
   const expenseCategories = records.categories.filter((category) => category.type === 'EXPENSE')
@@ -594,7 +670,7 @@ function App() {
         const payload = {
           fullName: authForm.fullName,
           email: authForm.email,
-          passwordHash: authForm.passwordHash,
+          password: authForm.password,
           otp: authForm.otp,
         }
 
@@ -609,7 +685,7 @@ function App() {
             userId: user.userId,
             fullName: user.fullName,
             currency: user.currency || 'INR',
-            timezone: user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+            timezone: user.timezone || defaultTimezone(),
             monthlyBudget: user.monthlyBudget || '',
           },
         }
@@ -622,16 +698,37 @@ function App() {
         setAuthForm({
           fullName: '',
           email: user.email,
-          passwordHash: '',
+          password: '',
           otp: '',
         })
         setStatusMessage('Account created successfully. Please sign in to continue.')
+      } else if (authMode === 'admin') {
+        const adminSession = await apiRequest('/admin/login', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: authForm.email,
+            password: authForm.password,
+          }),
+        })
+
+        setSession({
+          token: adminSession.token,
+          email: adminSession.email,
+          userId: 'admin',
+          fullName: adminSession.fullName || 'SpendSmart Admin',
+          currency: 'INR',
+          timezone: defaultTimezone(),
+          monthlyBudget: '',
+          role: 'admin',
+        })
+        setAccountLinkUserId('')
+        setStatusMessage('Admin login successful. Dashboard is syncing now.')
       } else {
         const token = await apiRequest('/auth/login', {
           method: 'POST',
           body: JSON.stringify({
             email: authForm.email,
-            passwordHash: authForm.passwordHash,
+            password: authForm.password,
           }),
         })
 
@@ -643,8 +740,9 @@ function App() {
           userId: knownUser?.userId || '',
           fullName: knownUser?.fullName || authForm.email.split('@')[0],
           currency: knownUser?.currency || 'INR',
-          timezone: knownUser?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+          timezone: knownUser?.timezone || defaultTimezone(),
           monthlyBudget: knownUser?.monthlyBudget || '',
+          role: 'user',
         })
         setAccountLinkUserId(knownUser?.userId ? String(knownUser.userId) : '')
         setBudgetForm((current) => ({ ...current, currency: knownUser?.currency || 'INR' }))
@@ -659,6 +757,8 @@ function App() {
     } catch (error) {
       if (authMode === 'login' && (error.status === 401 || error.status === 403)) {
         setErrorMessage('Wrong email or password.')
+      } else if (authMode === 'admin' && (error.status === 401 || error.status === 403)) {
+        setErrorMessage('Wrong admin email or password.')
       } else {
         setErrorMessage(error.message || 'Authentication failed.')
         if (authMode === 'register' && error.message) {
@@ -1034,6 +1134,60 @@ function App() {
     }
   }
 
+  async function handleAdminUserStatus(userId, active) {
+    setIsBusy(true)
+    setErrorMessage('')
+
+    try {
+      await apiRequest(`/admin/users/${userId}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ active }),
+      }, session.token)
+      setStatusMessage(active ? 'User reactivated successfully.' : 'User suspended successfully.')
+      setRefreshToken((value) => value + 1)
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to update user status.')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleAdminDeleteUser(userId) {
+    setIsBusy(true)
+    setErrorMessage('')
+
+    try {
+      await apiRequest(`/admin/users/${userId}`, { method: 'DELETE' }, session.token)
+      setStatusMessage('User deleted successfully.')
+      setRefreshToken((value) => value + 1)
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to delete the user.')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleAdminBroadcast(event) {
+    event.preventDefault()
+    setIsBusy(true)
+    setErrorMessage('')
+    setStatusMessage('')
+
+    try {
+      const response = await apiRequest('/admin/broadcast', {
+        method: 'POST',
+        body: JSON.stringify(broadcastForm),
+      }, session.token)
+      setBroadcastForm(emptyBroadcastForm)
+      setStatusMessage(`Broadcast queued for ${response.sentCount || 0} users.`)
+      setRefreshToken((value) => value + 1)
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to send the broadcast.')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   async function handleRecurringAccessPayment() {
     setIsCheckoutOpening(true)
     setIsBusy(true)
@@ -1115,6 +1269,8 @@ function App() {
       }
 
       const payload = {
+        currency: profileForm.currency,
+        timezone: profileForm.timezone,
         monthlyBudget: profileForm.monthlyBudget === '' ? 0 : toNumber(profileForm.monthlyBudget),
       }
 
@@ -1177,9 +1333,9 @@ function App() {
       }
 
       setRefreshToken((value) => value + 1)
-      setStatusMessage('Monthly budget goal saved successfully.')
+      setStatusMessage('Profile preferences saved successfully.')
     } catch (error) {
-      setErrorMessage(error.message || 'Monthly budget goal could not be saved.')
+      setErrorMessage(error.message || 'Profile preferences could not be saved.')
     } finally {
       setIsProfileSaving(false)
     }
@@ -1192,8 +1348,9 @@ function App() {
       fullName: '',
       userId: '',
       currency: 'INR',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+      timezone: defaultTimezone(),
       monthlyBudget: '',
+      role: 'user',
     })
     window.localStorage.removeItem(SESSION_KEY)
     setRecords({
@@ -1203,6 +1360,12 @@ function App() {
       budgets: [],
       recurring: [],
       summary: null,
+    })
+    setAdminRecords({
+      overview: null,
+      users: [],
+      transactions: [],
+      auditLogs: [],
     })
     setStatusMessage('You have been signed out.')
     setErrorMessage('')
@@ -1307,7 +1470,291 @@ function App() {
     )
   }
 
+  function renderAdminSection() {
+    const overview = adminRecords.overview || {}
+
+    if (activeSection === 'users') {
+      return (
+        <div className="section-stack">
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Admin Users</p>
+                <h2>Manage platform accounts</h2>
+              </div>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Status</th>
+                    <th>Expense total</th>
+                    <th>Income total</th>
+                    <th>Transactions</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adminRecords.users.length ? adminRecords.users.map((user) => (
+                    <tr key={user.userId}>
+                      <td>
+                        <strong>{user.fullName || user.email}</strong>
+                        <div className="cell-note">{user.email}</div>
+                      </td>
+                      <td>{isUserActive(user) ? 'Active' : 'Deactive'}</td>
+                      <td>{currencyFormat(user.expenseTotal, currentCurrency)}</td>
+                      <td>{currencyFormat(user.incomeTotal, currentCurrency)}</td>
+                      <td>{(user.expenseCount || 0) + (user.incomeCount || 0)}</td>
+                      <td className="actions-cell">
+                        <button
+                          type="button"
+                          className="table-button"
+                          onClick={() => handleAdminUserStatus(user.userId, !isUserActive(user))}
+                        >
+                          {isUserActive(user) ? 'Suspend' : 'Reactivate'}
+                        </button>
+                        <button
+                          type="button"
+                          className="table-button danger"
+                          onClick={() => handleAdminDeleteUser(user.userId)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan="6" className="empty-state">No users available.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )
+    }
+
+    if (activeSection === 'transactions') {
+      return (
+        <div className="section-stack">
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Platform Activity</p>
+                <h2>Expenses and incomes across the platform</h2>
+              </div>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Type</th>
+                    <th>Title</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adminRecords.transactions.length ? adminRecords.transactions.map((item) => (
+                    <tr key={`${item.kind}-${item.id}`}>
+                      <td>
+                        <strong>{item.userName}</strong>
+                        <div className="cell-note">{item.email}</div>
+                      </td>
+                      <td>{item.kind}</td>
+                      <td>{item.title}</td>
+                      <td>{currencyFormat(item.amount, item.currency || currentCurrency)}</td>
+                      <td>{fromApiDate(item.date)}</td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan="5" className="empty-state">No transactions available.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )
+    }
+
+    if (activeSection === 'broadcast') {
+      return (
+        <div className="section-stack">
+          <section className="panel form-panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Broadcast</p>
+                <h2>Send a platform-wide message</h2>
+              </div>
+            </div>
+            <form className="form-grid single-column" onSubmit={handleAdminBroadcast}>
+              <label className="field">
+                <span>Title</span>
+                <input
+                  value={broadcastForm.title}
+                  onChange={(event) => setBroadcastForm((current) => ({ ...current, title: event.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Message</span>
+                <textarea
+                  rows="5"
+                  value={broadcastForm.message}
+                  onChange={(event) => setBroadcastForm((current) => ({ ...current, message: event.target.value }))}
+                  required
+                />
+              </label>
+              <button type="submit" className="primary-button" disabled={isBusy}>
+                {isBusy ? 'Sending...' : 'Send broadcast'}
+              </button>
+            </form>
+          </section>
+        </div>
+      )
+    }
+
+    if (activeSection === 'audit') {
+      return (
+        <div className="section-stack">
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Audit Trail</p>
+                <h2>Admin activity log</h2>
+              </div>
+            </div>
+              <div className="list-stack">
+                {adminRecords.auditLogs.length ? adminRecords.auditLogs.map((entry, index) => (
+                <article key={`${entry.timestamp}-${index}`} className="audit-log-card">
+                  <div className="audit-log-head">
+                    <span className="audit-log-badge">{entry.action}</span>
+                    <span className="audit-log-time">{fromApiDate(entry.timestamp)}</span>
+                  </div>
+                  <div className="audit-log-grid">
+                    <div className="audit-log-item">
+                      <span>Target</span>
+                      <strong>{entry.targetType}</strong>
+                    </div>
+                    <div className="audit-log-item">
+                      <span>Actor</span>
+                      <strong>{entry.actorEmail}</strong>
+                    </div>
+                    <div className="audit-log-item">
+                      <span>Reference</span>
+                      <strong>{entry.targetId || 'N/A'}</strong>
+                    </div>
+                  </div>
+                  <div className="audit-log-details">
+                    <span>Details</span>
+                    <p>{entry.details}</p>
+                  </div>
+                </article>
+              )) : (
+                <div className="empty-state">No admin actions recorded yet.</div>
+              )}
+            </div>
+          </section>
+        </div>
+      )
+    }
+
+    return (
+      <div className="section-stack admin-overview-stack">
+        <section className="admin-overview-hero">
+          <div>
+            <p className="eyebrow">Admin Overview</p>
+            <h2>Platform health at a glance</h2>
+          </div>
+          <p className="hero-copy">
+            Review user activity, spending volume, and category trends from one clean control surface.
+          </p>
+        </section>
+
+        <section className="stats-grid admin-stats-grid">
+          <article className="metric-card admin-metric-card">
+            <span>Total users</span>
+            <strong>{overview.totalUsers || 0}</strong>
+            <small>{overview.activeUsers || 0} active</small>
+          </article>
+          <article className="metric-card admin-metric-card">
+            <span>Total transactions</span>
+            <strong>{overview.totalTransactions || 0}</strong>
+            <small>{overview.suspendedUsers || 0} suspended users</small>
+          </article>
+          <article className="metric-card admin-metric-card">
+            <span>Total expense</span>
+            <strong>{currencyFormat(overview.totalExpense || 0, currentCurrency)}</strong>
+            <small>Platform-wide spend</small>
+          </article>
+          <article className="metric-card accent admin-metric-card">
+            <span>Average monthly spend</span>
+            <strong>{currencyFormat(overview.averageMonthlySpendPerUser || 0, currentCurrency)}</strong>
+            <small>Per user estimate</small>
+          </article>
+        </section>
+
+        <section className="content-grid admin-overview-grid">
+          <article className="panel admin-overview-panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Top Spending Users</p>
+                <h2>Highest platform spenders</h2>
+              </div>
+            </div>
+            <div className="admin-ranking-list">
+              {(overview.topSpendingUsers || []).length ? overview.topSpendingUsers.map((user) => (
+                <article key={user.userId} className="admin-ranking-card">
+                  <div className="admin-ranking-index">
+                    <span>#{(overview.topSpendingUsers || []).findIndex((item) => item.userId === user.userId) + 1}</span>
+                  </div>
+                  <div className="admin-ranking-copy">
+                    <strong>{user.fullName || user.email}</strong>
+                    <span>{user.email}</span>
+                  </div>
+                  <div className="admin-ranking-amount">
+                    <span>Total spend</span>
+                    <strong>{currencyFormat(user.expenseTotal || 0, currentCurrency)}</strong>
+                  </div>
+                </article>
+              )) : <div className="empty-state">No spending records yet.</div>}
+            </div>
+          </article>
+
+          <article className="panel admin-overview-panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Popular Categories</p>
+                <h2>Most used categories</h2>
+              </div>
+            </div>
+            <div className="admin-category-list">
+              {(overview.mostUsedCategories || []).length ? overview.mostUsedCategories.map((category) => (
+                <article key={category.name} className="admin-category-card">
+                  <div>
+                    <strong>{category.name}</strong>
+                    <span>Category usage</span>
+                  </div>
+                  <strong>{category.count}</strong>
+                </article>
+              )) : <div className="empty-state">No category activity yet.</div>}
+            </div>
+          </article>
+        </section>
+      </div>
+    )
+  }
+
   function renderSection() {
+    if (session.role === 'admin') {
+      return renderAdminSection()
+    }
+
     if (activeSection === 'dashboard') {
       return (
         <div className="section-stack">
@@ -2076,6 +2523,38 @@ function App() {
       <div className="section-stack">
         <section className="panel form-panel">
           <div className="panel-header">
+            <div>
+              <p className="eyebrow">Preferences</p>
+              <h2>Manage your account settings</h2>
+            </div>
+          </div>
+          <form className="form-grid" onSubmit={handleProfileSubmit}>
+            <label className="field">
+              <span>Preferred currency</span>
+              <select value={profileForm.currency} onChange={(event) => setProfileForm({ ...profileForm, currency: event.target.value })}>
+                {supportedCurrencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Timezone</span>
+              <select value={profileForm.timezone} onChange={(event) => setProfileForm({ ...profileForm, timezone: event.target.value })}>
+                {supportedTimezones.map((timezone) => (
+                  <option key={timezone} value={timezone}>{formatTimezoneLabel(timezone)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Monthly budget goal</span>
+              <input type="number" min="0" step="0.01" value={profileForm.monthlyBudget} onChange={(event) => setProfileForm({ ...profileForm, monthlyBudget: event.target.value })} />
+            </label>
+            <button type="submit" className="primary-button" disabled={isProfileSaving || isBusy}>
+              {isProfileSaving ? 'Saving...' : 'Save preferences'}
+            </button>
+          </form>
+        </section>
+
+        <section className="panel form-panel">
+          <div className="panel-header">
               <div>
                 <p className="eyebrow">Profile</p>
               <h2>Income and expense summary</h2>
@@ -2182,6 +2661,9 @@ function App() {
             <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => handleAuthModeChange('register')}>
               Register
             </button>
+            <button type="button" className={authMode === 'admin' ? 'active' : ''} onClick={() => handleAuthModeChange('admin')}>
+              Admin
+            </button>
           </div>
           <form className="form-grid single-column" onSubmit={handleAuthSubmit}>
             {authMode === 'register' ? (
@@ -2227,10 +2709,10 @@ function App() {
             ) : null}
             <label className="field">
               <span>Password</span>
-              <input type="password" value={authForm.passwordHash} onChange={(event) => updateAuthForm({ passwordHash: event.target.value })} required />
+              <input type="password" value={authForm.password} onChange={(event) => updateAuthForm({ password: event.target.value })} required />
             </label>
             <button type="submit" className="primary-button" disabled={isBusy || (authMode === 'register' && !isOtpVerified)}>
-              {isBusy ? 'Please wait...' : authMode === 'login' ? 'Sign in' : 'Create account'}
+              {isBusy ? 'Please wait...' : authMode === 'login' ? 'Sign in' : authMode === 'admin' ? 'Login' : 'Create account'}
             </button>
           </form>
           {statusMessage ? <div className="banner success">{statusMessage}</div> : null}
@@ -2246,10 +2728,10 @@ function App() {
         <div className="brand-block">
           <p className="eyebrow">SpendSmart</p>
           <strong>{session.fullName || session.email}</strong>
-          <span>User ID: {session.userId || 'Connect account'}</span>
+          <span>{session.role === 'admin' ? 'Role: Administrator' : `User ID: ${session.userId || 'Connect account'}`}</span>
         </div>
         <nav className="nav-stack">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -2267,14 +2749,15 @@ function App() {
         <header className="workspace-header">
           <div>
             <p className="eyebrow">Expense Tracker App</p>
-            <h1>{navItems.find((item) => item.id === activeSection)?.label || 'Dashboard'}</h1>
+            <h1>{visibleNavItems.find((item) => item.id === activeSection)?.label || 'Dashboard'}</h1>
           </div>
           <div className="header-actions">
             <span>{currentCurrency} | {currentTimezone}</span>
             <button type="button" className="theme-toggle compact" onClick={toggleTheme}>
               {theme === 'dark' ? 'Light' : 'Dark'}
             </button>
-            <span className="status-pill ready">{formatHeaderDateTime(currentDateTime)}</span>
+            <span>{formatHeaderDateTime(currentDateTime)}</span>
+            <span className="status-pill ready">Workspace active</span>
           </div>
         </header>
 

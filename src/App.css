@@ -154,7 +154,7 @@
 
 .auth-switch {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   background: rgba(255, 255, 255, 0.8);
   border-radius: 18px;
   padding: 6px;
@@ -284,6 +284,10 @@
   gap: 14px;
 }
 
+.header-actions {
+  flex-wrap: wrap;
+}
+
 .otp-actions {
   align-items: end;
 }
@@ -338,6 +342,17 @@
   border: 1px solid rgba(26, 58, 50, 0.12);
 }
 
+.admin-overview-hero {
+  padding: 28px 30px;
+  border-radius: 28px;
+  border: 1px solid rgba(26, 58, 50, 0.12);
+  background:
+    radial-gradient(circle at top right, rgba(250, 204, 21, 0.18), transparent 32%),
+    linear-gradient(135deg, rgba(255, 250, 236, 0.94), rgba(239, 253, 248, 0.92));
+  display: grid;
+  gap: 10px;
+}
+
 .hero-copy,
 .helper-copy,
 .note-list li,
@@ -376,8 +391,18 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.admin-stats-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .metric-card {
   padding: 22px;
+}
+
+.admin-metric-card {
+  min-height: 158px;
+  display: grid;
+  align-content: start;
 }
 
 .metric-card strong {
@@ -401,9 +426,90 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.admin-overview-grid {
+  align-items: start;
+}
+
 .panel,
 .budget-card {
   padding: 24px;
+}
+
+.admin-overview-panel {
+  padding: 26px;
+}
+
+.admin-ranking-list,
+.admin-category-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.admin-ranking-card,
+.admin-category-card {
+  border-radius: 20px;
+  border: 1px solid rgba(26, 58, 50, 0.08);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.admin-ranking-card {
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.admin-ranking-index {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #14532d, #1f7a5c);
+  color: #fff9ec;
+  font-weight: 800;
+}
+
+.admin-ranking-copy,
+.admin-ranking-amount,
+.admin-category-card div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-ranking-copy {
+  min-width: 0;
+}
+
+.admin-ranking-copy strong,
+.admin-ranking-amount strong,
+.admin-category-card strong {
+  color: #18352e;
+}
+
+.admin-ranking-copy span,
+.admin-ranking-amount span,
+.admin-category-card span {
+  color: #5f675f;
+}
+
+.admin-ranking-copy span {
+  overflow-wrap: anywhere;
+}
+
+.admin-ranking-amount {
+  justify-items: end;
+  text-align: right;
+}
+
+.admin-category-card {
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
 }
 
 .budget-card-top {
@@ -687,6 +793,77 @@ th {
   background: rgba(255, 255, 255, 0.72);
 }
 
+.audit-log-card {
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(26, 58, 50, 0.08);
+  display: grid;
+  gap: 14px;
+}
+
+.audit-log-head,
+.audit-log-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.audit-log-grid {
+  flex-wrap: wrap;
+}
+
+.audit-log-badge,
+.audit-log-time {
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.audit-log-badge {
+  background: rgba(31, 122, 92, 0.12);
+  color: #1f7a5c;
+}
+
+.audit-log-time {
+  background: rgba(250, 204, 21, 0.18);
+  color: #7c5100;
+}
+
+.audit-log-item,
+.audit-log-details {
+  display: grid;
+  gap: 6px;
+}
+
+.audit-log-item {
+  min-width: 160px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 251, 241, 0.78);
+}
+
+.audit-log-item span,
+.audit-log-details span {
+  color: #5f675f;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.audit-log-item strong,
+.audit-log-details p {
+  color: #18352e;
+}
+
+.audit-log-details p {
+  margin: 0;
+  line-height: 1.55;
+}
+
 .recurring-card {
   display: flex;
   justify-content: space-between;
@@ -867,6 +1044,13 @@ th {
     rgba(18, 30, 27, 0.92);
 }
 
+:root[data-theme='dark'] .admin-overview-hero {
+  background:
+    radial-gradient(circle at top right, rgba(45, 212, 191, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(20, 36, 32, 0.96), rgba(17, 24, 39, 0.94));
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
 :root[data-theme='dark'] .auth-logo strong,
 :root[data-theme='dark'] .auth-visual strong {
   color: #e8f4ef;
@@ -922,9 +1106,48 @@ th {
 :root[data-theme='dark'] .empty-state,
 :root[data-theme='dark'] .insight-strip div,
 :root[data-theme='dark'] .mini-list div,
-:root[data-theme='dark'] .intro-badges span {
+:root[data-theme='dark'] .intro-badges span,
+:root[data-theme='dark'] .audit-log-card,
+:root[data-theme='dark'] .audit-log-item,
+:root[data-theme='dark'] .admin-ranking-card,
+:root[data-theme='dark'] .admin-category-card {
   background: rgba(31, 41, 55, 0.82);
   color: #dbece5;
+}
+
+:root[data-theme='dark'] .audit-log-card {
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+:root[data-theme='dark'] .admin-ranking-card,
+:root[data-theme='dark'] .admin-category-card {
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+:root[data-theme='dark'] .audit-log-badge {
+  background: rgba(45, 212, 191, 0.12);
+  color: #7dd3fc;
+}
+
+:root[data-theme='dark'] .audit-log-time {
+  background: rgba(251, 191, 36, 0.16);
+  color: #fde68a;
+}
+
+:root[data-theme='dark'] .audit-log-item span,
+:root[data-theme='dark'] .audit-log-details span,
+:root[data-theme='dark'] .audit-log-details p,
+:root[data-theme='dark'] .audit-log-item strong,
+:root[data-theme='dark'] .admin-ranking-copy strong,
+:root[data-theme='dark'] .admin-ranking-amount strong,
+:root[data-theme='dark'] .admin-category-card strong {
+  color: #dbece5;
+}
+
+:root[data-theme='dark'] .admin-ranking-copy span,
+:root[data-theme='dark'] .admin-ranking-amount span,
+:root[data-theme='dark'] .admin-category-card span {
+  color: #a7b8b2;
 }
 
 :root[data-theme='dark'] .auth-switch button {
@@ -1049,9 +1272,29 @@ th {
   .hero-actions,
   .chart-caption,
   .actions-inline,
-  .actions-cell {
+  .actions-cell,
+  .admin-category-card {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .admin-stats-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-ranking-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-ranking-index {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+
+  .admin-ranking-amount {
+    justify-items: start;
+    text-align: left;
   }
 
   .recurring-price {
