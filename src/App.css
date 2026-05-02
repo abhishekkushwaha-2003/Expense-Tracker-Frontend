@@ -392,7 +392,7 @@
 }
 
 .admin-stats-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .metric-card {
@@ -938,6 +938,11 @@ th {
 
 .recurring-price strong {
   font-size: 1.05rem;
+}
+
+.recurring-validity {
+  display: block;
+  margin-top: 4px;
 }
 
 .empty-state {

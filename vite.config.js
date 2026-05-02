@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const devHeaders = {
-  'Permissions-Policy': 'accelerometer=(self "https://checkout.razorpay.com" "https://checkout-static-next.razorpay.com"), gyroscope=(self "https://checkout.razorpay.com" "https://checkout-static-next.razorpay.com"), magnetometer=(self "https://checkout.razorpay.com" "https://checkout-static-next.razorpay.com")',
+  'Permissions-Policy': 'accelerometer=(self "https://checkout.razorpay.com" "https://checkout-static-next.razorpay.com" "https://api.sardine.ai"), gyroscope=(self "https://checkout.razorpay.com" "https://checkout-static-next.razorpay.com" "https://api.sardine.ai"), magnetometer=(self "https://checkout.razorpay.com" "https://checkout-static-next.razorpay.com" "https://api.sardine.ai")',
 }
 
 export default defineConfig({

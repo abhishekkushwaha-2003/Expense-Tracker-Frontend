@@ -31,9 +31,17 @@ const recurringTypes = ['EXPENSE', 'INCOME']
 const recurringFrequencies = ['DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY']
 const incomeSources = ['Salary', 'Freelance', 'Business', 'Investment', 'Gift', 'Other']
 const supportedCurrencies = ['INR', 'USD', 'EUR', 'GBP']
-const supportedTimezones = typeof Intl.supportedValuesOf === 'function'
-  ? Intl.supportedValuesOf('timeZone')
-  : ['Asia/Kolkata', 'Asia/Calcutta', 'Asia/Dubai', 'Europe/London', 'America/New_York', 'UTC']
+const timezoneOptions = [
+  { id: 'asia', label: 'Asia', value: 'Asia/Kolkata' },
+  { id: 'africa', label: 'Africa', value: 'Africa/Cairo' },
+  { id: 'north-america', label: 'North America', value: 'America/New_York' },
+  { id: 'south-america', label: 'South America', value: 'America/Sao_Paulo' },
+  { id: 'antarctica', label: 'Antarctica', value: 'Antarctica/McMurdo' },
+  { id: 'europe', label: 'Europe', value: 'Europe/London' },
+  { id: 'australia', label: 'Australia', value: 'Australia/Sydney' },
+]
+const passwordPolicy = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/
+const emailPolicy = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -97,6 +105,7 @@ const emptyAuthForm = {
 const emptyProfileForm = {
   currency: 'INR',
   timezone: 'Asia/Kolkata',
+  timezoneChoice: 'asia',
   monthlyBudget: '',
 }
 
@@ -138,6 +147,10 @@ function toLocalDateTime(dateValue) {
 }
 
 function fromApiDate(dateValue) {
+  return formatDateOnly(dateValue)
+}
+
+function formatDateOnly(dateValue, timezone = undefined) {
   if (!dateValue) {
     return '—'
   }
@@ -145,7 +158,7 @@ function fromApiDate(dateValue) {
   const date = new Date(dateValue)
   return Number.isNaN(date.getTime())
     ? dateValue
-    : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: timezone })
 }
 
 function monthKey(dateValue) {
@@ -171,6 +184,26 @@ function formatTimezoneLabel(timezone) {
 
 function defaultTimezone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'
+}
+
+function defaultTimezoneChoice() {
+  return timezoneOptions[0].id
+}
+
+function normaliseTimezone(timezone) {
+  return timezoneOptions.find((option) => option.value === timezone)?.value || 'Asia/Kolkata'
+}
+
+function getTimezoneChoiceId(timezone) {
+  return timezoneOptions.find((option) => option.value === timezone)?.id || defaultTimezoneChoice()
+}
+
+function isValidPassword(password) {
+  return passwordPolicy.test(password || '')
+}
+
+function isValidEmail(email) {
+  return emailPolicy.test((email || '').trim())
 }
 
 function isUserActive(user) {
@@ -217,7 +250,7 @@ function readStoredTheme() {
   }
 }
 
-function formatDateTime(dateValue) {
+function formatDateTime(dateValue, timezone = undefined) {
   if (!dateValue) {
     return 'Not active'
   }
@@ -225,16 +258,55 @@ function formatDateTime(dateValue) {
   const date = new Date(dateValue)
   return Number.isNaN(date.getTime())
     ? dateValue
-    : date.toLocaleString()
+    : date.toLocaleString(undefined, { timeZone: timezone })
 }
 
-function formatHeaderDateTime(dateValue) {
+function formatHeaderDateTime(dateValue, timezone = undefined) {
   return new Intl.DateTimeFormat(undefined, {
     day: '2-digit',
     month: 'short',
+    year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZone: timezone,
   }).format(dateValue)
+}
+
+function getLatestActivityMonthKey(records, session) {
+  const candidateKeys = [
+    ...records.expenses.map((expense) => monthKey(expense.date)),
+    ...records.incomes.map((income) => monthKey(income.date)),
+    ...records.budgets.map((budget) => `${budget.year}-${String(budget.month).padStart(2, '0')}`),
+    session.monthlyBudget ? monthKey(new Date().toISOString()) : '',
+  ].filter(Boolean)
+
+  if (!candidateKeys.length) {
+    return monthKey(new Date().toISOString())
+  }
+
+  return candidateKeys.sort().at(-1)
+}
+
+function getLatestBudget(records) {
+  const budgets = [...records.budgets]
+  if (!budgets.length) {
+    return null
+  }
+
+  budgets.sort((left, right) => {
+    const leftKey = `${left.year}-${String(left.month).padStart(2, '0')}`
+    const rightKey = `${right.year}-${String(right.month).padStart(2, '0')}`
+    if (leftKey === rightKey) {
+      return (right.budgetId || 0) - (left.budgetId || 0)
+    }
+    return rightKey.localeCompare(leftKey)
+  })
+
+  return budgets[0]
+}
+
+function resolveRecurringCreationState(checked, recurringAccess) {
+  return checked && !recurringAccess.active
 }
 
 function loadRazorpayCheckout() {
@@ -370,7 +442,8 @@ function App() {
   const [profileForm, setProfileForm] = useState({
     ...emptyProfileForm,
     currency: rememberedSession.currency || 'INR',
-    timezone: rememberedSession.timezone || defaultTimezone(),
+    timezone: normaliseTimezone(rememberedSession.timezone || defaultTimezone()),
+    timezoneChoice: getTimezoneChoiceId(rememberedSession.timezone || defaultTimezone()),
     monthlyBudget: rememberedSession.monthlyBudget || '',
   })
   const [broadcastForm, setBroadcastForm] = useState(emptyBroadcastForm)
@@ -420,7 +493,8 @@ function App() {
   useEffect(() => {
     setProfileForm({
       currency: session.currency || 'INR',
-      timezone: session.timezone || defaultTimezone(),
+      timezone: normaliseTimezone(session.timezone || defaultTimezone()),
+      timezoneChoice: getTimezoneChoiceId(session.timezone || defaultTimezone()),
       monthlyBudget: session.monthlyBudget || '',
     })
   }, [session.currency, session.monthlyBudget, session.timezone])
@@ -533,6 +607,22 @@ function App() {
     }
   }, [session.role, session.userId, session.token, refreshToken])
 
+  useEffect(() => {
+    if (session.role === 'admin') {
+      return
+    }
+
+    const latestKey = getLatestActivityMonthKey(records, session)
+    const hasCurrentMonthData =
+      records.expenses.some((expense) => monthKey(expense.date) === dashboardMonthKey) ||
+      records.incomes.some((income) => monthKey(income.date) === dashboardMonthKey) ||
+      records.budgets.some((budget) => `${budget.year}-${String(budget.month).padStart(2, '0')}` === dashboardMonthKey)
+
+    if (!hasCurrentMonthData && latestKey && latestKey !== dashboardMonthKey) {
+      setDashboardMonthKey(latestKey)
+    }
+  }, [dashboardMonthKey, records, session])
+
   const categoriesById = Object.fromEntries(records.categories.map((category) => [category.categoryId, category]))
   const expenseCategories = records.categories.filter((category) => category.type === 'EXPENSE')
   const incomeCategories = records.categories.filter((category) => category.type === 'INCOME')
@@ -547,9 +637,10 @@ function App() {
   const activeBudget =
     records.budgets.find((budget) => `${budget.year}-${String(budget.month).padStart(2, '0')}` === dashboardMonthKey) ||
     null
-  const budgetLimit = activeBudget ? toNumber(activeBudget.monthlyLimit) : toNumber(session.monthlyBudget)
-  const budgetProgress = budgetLimit > 0 ? clamp((totalExpense / budgetLimit) * 100, 0, 160) : 0
-  const hasHealthData = totalIncome > 0 || totalExpense > 0 || budgetLimit > 0
+  const latestBudget = getLatestBudget(records)
+  const budgetLimit = activeBudget ? toNumber(activeBudget.monthlyLimit) : toNumber(latestBudget?.monthlyLimit ?? session.monthlyBudget)
+  const budgetProgress = budgetLimit > 0 ? clamp((totalExpense / budgetLimit) * 100, 0, 100) : 0
+  const hasHealthData = totalIncome > 0 || totalExpense > 0
   const budgetAdherenceScore = budgetLimit > 0 ? clamp(100 - Math.max(0, budgetProgress - 100), 0, 100) : 0
   const expenseToIncomeScore =
     totalIncome > 0 ? clamp(100 - Math.max(0, (totalExpense / totalIncome) * 100 - 100), 0, 100) : 0
@@ -652,12 +743,26 @@ function App() {
       return {
         ...budget,
         spentAmount,
-        progress: budget.monthlyLimit > 0 ? clamp((spentAmount / budget.monthlyLimit) * 100, 0, 160) : 0,
+        progress: budget.monthlyLimit > 0 ? clamp((spentAmount / budget.monthlyLimit) * 100, 0, 100) : 0,
       }
     })
 
   async function handleAuthSubmit(event) {
     event.preventDefault()
+    if (!isValidEmail(authForm.email)) {
+      const message = 'Enter a valid email address in standard format, for example user@example.com.'
+      setErrorMessage(message)
+      window.alert(message)
+      return
+    }
+
+    if (!isValidPassword(authForm.password)) {
+      const message = 'Password must contain at least one uppercase letter, one lowercase letter, one digit, one special character, and be at least 8 characters long.'
+      setErrorMessage(message)
+      window.alert(message)
+      return
+    }
+
     if (authMode === 'register' && !isOtpVerified) {
       setErrorMessage('Verify OTP before creating your account.')
       window.alert('Verify OTP before creating your account.')
@@ -935,11 +1040,15 @@ function App() {
                 frequency: expenseForm.recurringFrequency,
                 startDate: expenseForm.date,
               }),
-            }, session.token).catch(() => null)
+            }, session.token)
+            setStatusMessage('Expense saved and recurring rule created successfully.')
+          } else {
+            setActiveSection('recurring')
+            setStatusMessage('Expense saved. Unlock recurring access in the Recurring section to create this recurring rule.')
           }
+        } else {
+          setStatusMessage('Expense saved successfully.')
         }
-
-        setStatusMessage('Expense saved successfully.')
       }
 
       setExpenseForm(emptyExpenseForm)
@@ -992,11 +1101,15 @@ function App() {
                 frequency: incomeForm.recurringFrequency,
                 startDate: incomeForm.date,
               }),
-            }, session.token).catch(() => null)
+            }, session.token)
+            setStatusMessage('Income saved and recurring rule created successfully.')
+          } else {
+            setActiveSection('recurring')
+            setStatusMessage('Income saved. Unlock recurring access in the Recurring section to create this recurring rule.')
           }
+        } else {
+          setStatusMessage('Income entry saved successfully.')
         }
-
-        setStatusMessage('Income entry saved successfully.')
       }
 
       setIncomeForm(emptyIncomeForm)
@@ -1080,6 +1193,11 @@ function App() {
         }, session.token)
         setStatusMessage('Budget created successfully.')
       }
+
+      setSession((current) => ({
+        ...current,
+        monthlyBudget: payload.monthlyLimit,
+      }))
 
       setBudgetForm((current) => ({
         ...emptyBudgetForm,
@@ -1273,8 +1391,7 @@ function App() {
 
       const payload = {
         currency: profileForm.currency,
-        timezone: profileForm.timezone,
-        monthlyBudget: profileForm.monthlyBudget === '' ? 0 : toNumber(profileForm.monthlyBudget),
+        timezone: normaliseTimezone(profileForm.timezone),
       }
 
       const updatedUser = await apiRequest(`/auth/users/${session.userId}/preferences`, {
@@ -1303,38 +1420,6 @@ function App() {
 
       window.localStorage.setItem(USERS_KEY, JSON.stringify(updatedKnownUsers))
       setSession(updatedSession)
-      setBudgetForm((current) => ({ ...current, currency: updatedSession.currency || 'INR', monthlyLimit: String(updatedUser.monthlyBudget || '') }))
-
-      const now = new Date()
-      const currentMonth = now.getMonth() + 1
-      const currentYear = now.getFullYear()
-      const currentMonthKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}`
-      const spentAmount = records.expenses
-        .filter((expense) => monthKey(expense.date) === currentMonthKey)
-        .reduce((sum, expense) => sum + toNumber(expense.amount), 0)
-      const existingBudget = records.budgets.find((budget) => budget.month === currentMonth && budget.year === currentYear)
-      const budgetPayload = {
-        userId: Number(session.userId),
-        monthlyLimit: toNumber(updatedUser.monthlyBudget),
-        spentAmount,
-        currency: updatedSession.currency || 'INR',
-        month: currentMonth,
-        year: currentYear,
-        isActive: true,
-      }
-
-      if (existingBudget) {
-        await apiRequest(`/budgets/${existingBudget.budgetId}`, {
-          method: 'PUT',
-          body: JSON.stringify(budgetPayload),
-        }, session.token)
-      } else {
-        await apiRequest('/budgets', {
-          method: 'POST',
-          body: JSON.stringify(budgetPayload),
-        }, session.token)
-      }
-
       setRefreshToken((value) => value + 1)
       setStatusMessage('Profile preferences saved successfully.')
     } catch (error) {
@@ -1557,7 +1642,7 @@ function App() {
                     <th>Type</th>
                     <th>Title</th>
                     <th>Amount</th>
-                    <th>Date</th>
+                    <th>Date & time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1570,7 +1655,7 @@ function App() {
                       <td>{item.kind}</td>
                       <td>{item.title}</td>
                       <td>{currencyFormat(item.amount, item.currency || currentCurrency)}</td>
-                      <td>{fromApiDate(item.date)}</td>
+                      <td>{formatDateTime(item.date, session.timezone)}</td>
                     </tr>
                   )) : (
                     <tr>
@@ -1637,7 +1722,7 @@ function App() {
                 <article key={`${entry.timestamp}-${index}`} className="audit-log-card">
                   <div className="audit-log-head">
                     <span className="audit-log-badge">{entry.action}</span>
-                    <span className="audit-log-time">{fromApiDate(entry.timestamp)}</span>
+                    <span className="audit-log-time">{formatDateTime(entry.timestamp, session.timezone)}</span>
                   </div>
                   <div className="audit-log-grid">
                     <div className="audit-log-item">
@@ -1694,6 +1779,11 @@ function App() {
             <span>Total expense</span>
             <strong>{currencyFormat(overview.totalExpense || 0, currentCurrency)}</strong>
             <small>Platform-wide spend</small>
+          </article>
+          <article className="metric-card admin-metric-card">
+            <span>Total income</span>
+            <strong>{currencyFormat(overview.totalIncome || 0, currentCurrency)}</strong>
+            <small>Platform-wide income</small>
           </article>
           <article className="metric-card accent admin-metric-card">
             <span>Average monthly spend</span>
@@ -1931,7 +2021,7 @@ function App() {
                     </div>
                     <div className="recurring-amount">
                       <strong>{currencyFormat(item.amount, currentCurrency)}</strong>
-                      <span>{fromApiDate(item.nextExecutionDate || item.startDate)}</span>
+                      <span>{formatDateOnly(item.nextExecutionDate || item.startDate, session.timezone)}</span>
                     </div>
                   </div>
                 )) : (
@@ -2443,7 +2533,7 @@ function App() {
               </div>
               <div className="align-right">
                 <strong>Access active</strong>
-                <span>Valid until {formatDateTime(recurringAccess.validUntil)}</span>
+                <span className="recurring-validity">Valid until {formatDateTime(recurringAccess.validUntil, session.timezone)}</span>
               </div>
             </div>
             <form className="form-grid" onSubmit={handleRecurringSubmit}>
@@ -2507,7 +2597,7 @@ function App() {
                       <td>{item.title}</td>
                       <td>{item.type}</td>
                       <td>{item.frequency}</td>
-                      <td>{fromApiDate(item.nextExecutionDate || item.startDate)}</td>
+                      <td>{formatDateOnly(item.nextExecutionDate || item.startDate, session.timezone)}</td>
                       <td>{currencyFormat(item.amount, currentCurrency)}</td>
                       <td className="actions-cell">
                         <button type="button" className="table-button danger" onClick={() => deleteResource(`/recurring/${item.id}`, 'Recurring rule deleted successfully.')}>Delete</button>
@@ -2544,15 +2634,21 @@ function App() {
             </label>
             <label className="field">
               <span>Timezone</span>
-              <select value={profileForm.timezone} onChange={(event) => setProfileForm({ ...profileForm, timezone: event.target.value })}>
-                {supportedTimezones.map((timezone) => (
-                  <option key={timezone} value={timezone}>{formatTimezoneLabel(timezone)}</option>
+              <select
+                value={profileForm.timezoneChoice}
+                onChange={(event) => {
+                  const selectedOption = timezoneOptions.find((option) => option.id === event.target.value) || timezoneOptions[0]
+                  setProfileForm({
+                    ...profileForm,
+                    timezoneChoice: selectedOption.id,
+                    timezone: selectedOption.value,
+                  })
+                }}
+              >
+                {timezoneOptions.map((timezone) => (
+                  <option key={timezone.id} value={timezone.id}>{timezone.label}</option>
                 ))}
               </select>
-            </label>
-            <label className="field">
-              <span>Monthly budget goal</span>
-              <input type="number" min="0" step="0.01" value={profileForm.monthlyBudget} onChange={(event) => setProfileForm({ ...profileForm, monthlyBudget: event.target.value })} />
             </label>
             <button type="submit" className="primary-button" disabled={isProfileSaving || isBusy}>
               {isProfileSaving ? 'Saving...' : 'Save preferences'}
@@ -2591,6 +2687,10 @@ function App() {
             <div className="profile-card">
               <span>Total income</span>
               <strong>{currencyFormat(allIncomeTotal, currentCurrency)}</strong>
+            </div>
+            <div className="profile-card">
+              <span>Monthly budget goal</span>
+              <strong>{currencyFormat(latestBudget?.monthlyLimit ?? session.monthlyBudget ?? 0, currentCurrency)}</strong>
             </div>
             <div className="profile-card">
               <span>Total expense</span>
@@ -2637,15 +2737,15 @@ function App() {
           <div className="auth-visual">
             <div>
               <span>Monthly focus</span>
-              <strong>₹42,800</strong>
+              <strong>Personalized</strong>
             </div>
             <div>
               <span>Saved this week</span>
-              <strong>18%</strong>
+              <strong>After login</strong>
             </div>
             <div>
               <span>Budget health</span>
-              <strong>Good</strong>
+              <strong>Tracks live</strong>
             </div>
           </div>
           <div className="intro-badges">
@@ -2716,7 +2816,14 @@ function App() {
             ) : null}
             <label className="field">
               <span>Password</span>
-              <input type="password" value={authForm.password} onChange={(event) => updateAuthForm({ password: event.target.value })} required />
+              <input
+                type="password"
+                value={authForm.password}
+                onChange={(event) => updateAuthForm({ password: event.target.value })}
+                pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$"
+                title="Password must contain at least one uppercase letter, one lowercase letter, one digit, one special character, and be at least 8 characters long."
+                required
+              />
             </label>
             <button type="submit" className="primary-button" disabled={isBusy || (authMode === 'register' && !isOtpVerified)}>
               {isBusy ? 'Please wait...' : authMode === 'login' ? 'Sign in' : authMode === 'admin' ? 'Login' : 'Create account'}
@@ -2763,7 +2870,7 @@ function App() {
             <button type="button" className="theme-toggle compact" onClick={toggleTheme}>
               {theme === 'dark' ? 'Light' : 'Dark'}
             </button>
-            <span>{formatHeaderDateTime(currentDateTime)}</span>
+            <span>{formatHeaderDateTime(currentDateTime, session.timezone)}</span>
             <span className="status-pill ready">Workspace active</span>
           </div>
         </header>
