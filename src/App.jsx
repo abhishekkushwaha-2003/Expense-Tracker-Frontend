@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useRef, useState } from 'react'
+﻿import { startTransition, useDeferredValue, useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -44,6 +44,64 @@ const passwordPolicy = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/
 const emailPolicy = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const authFeatureHighlights = [
+  {
+    key: 'income',
+    title: 'INCOME TRACKING',
+    description: 'Track salary and side income in one place.',
+  },
+  {
+    key: 'expense',
+    title: 'EXPENSE TRACKING',
+    description: 'Log and categorize expenses effortlessly.',
+  },
+  {
+    key: 'budget',
+    title: 'SMART BUDGETS',
+    description: 'Set focused limits and stay in control.',
+  },
+  {
+    key: 'recurring',
+    title: 'RECURRING FLOWS',
+    description: 'Automate recurring income and expenses.',
+  },
+]
+
+function renderAuthFeatureIcon(type) {
+  if (type === 'income') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 16h3v3H4v-3Zm6-5h3v8h-3v-8Zm6-3h3v11h-3V8Z" stroke="currentColor" strokeWidth="1.8" />
+        <path d="m4 12 4-4 3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+
+  if (type === 'expense') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M3 7.5 12 4l9 3.5v9L12 20l-9-3.5v-9Z" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8.5 10.5h7m-7 3h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  if (type === 'budget') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 4a8 8 0 1 0 8 8" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M12 12 17.5 8.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 7h8m-8 10h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M16 7a4.5 4.5 0 0 1 0 9M8 17a4.5 4.5 0 0 1 0-9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 const emptyExpenseForm = {
   expenseId: null,
@@ -863,7 +921,9 @@ function App() {
 
       setAuthForm(emptyAuthForm)
     } catch (error) {
-      if (authMode === 'login' && (error.status === 401 || error.status === 403)) {
+      if (authMode === 'login' && error.status === 403) {
+        setErrorMessage(error.message || 'Account is suspended. Please contact the admin.')
+      } else if (authMode === 'login' && error.status === 401) {
         setErrorMessage('Wrong email or password.')
       } else if (authMode === 'admin' && (error.status === 401 || error.status === 403)) {
         setErrorMessage('Wrong admin email or password.')
@@ -2734,19 +2794,16 @@ function App() {
             Track every rupee with clarity, build smarter money habits, and watch your spending story unfold
             through clean dashboards, quick insights, and daily progress that actually feels motivating.
           </p>
-          <div className="auth-visual">
-            <div>
-              <span>Monthly focus</span>
-              <strong>Personalized</strong>
-            </div>
-            <div>
-              <span>Saved this week</span>
-              <strong>After login</strong>
-            </div>
-            <div>
-              <span>Budget health</span>
-              <strong>Tracks live</strong>
-            </div>
+          <div className="auth-visual auth-feature-grid">
+            {authFeatureHighlights.map((item) => (
+              <article key={item.key} className={`auth-feature-card ${item.key}`}>
+                <div className="feature-icon-wrap">{renderAuthFeatureIcon(item.key)}</div>
+                <div className="feature-copy">
+                  <strong>{item.title}</strong>
+                  <p>{item.description}</p>
+                </div>
+              </article>
+            ))}
           </div>
           <div className="intro-badges">
             <span>Simple daily tracking</span>

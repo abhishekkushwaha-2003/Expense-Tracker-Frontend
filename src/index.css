@@ -1,12 +1,12 @@
+@import 'tailwindcss';
 :root {
   font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #21352f;
   background:
-    radial-gradient(circle at top left, rgba(250, 204, 21, 0.18), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(20, 184, 166, 0.2), transparent 28%),
-    linear-gradient(180deg, #f4efe2, #efe6d1);
+    linear-gradient(135deg, rgba(240, 253, 250, 0.86), rgba(255, 251, 235, 0.9) 46%, rgba(226, 232, 240, 0.76)),
+    #f6f1e6;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -16,9 +16,8 @@
 :root[data-theme='dark'] {
   color: #e8f4ef;
   background:
-    radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 30%),
-    radial-gradient(circle at bottom right, rgba(245, 158, 11, 0.13), transparent 30%),
-    linear-gradient(180deg, #0f1f1b, #111827);
+    linear-gradient(135deg, rgba(7, 31, 29, 0.98), rgba(9, 17, 32, 0.98) 56%, rgba(35, 27, 15, 0.94)),
+    #0b1518;
   color-scheme: dark;
 }
 
@@ -49,3 +48,4 @@ a {
 #root {
   min-height: 100vh;
 }
+
