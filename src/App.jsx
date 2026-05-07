@@ -178,6 +178,43 @@ const defaultRecurringAccess = {
   message: 'Recurring access requires payment.',
 }
 
+function emptySession() {
+  return {
+    token: '',
+    email: '',
+    fullName: '',
+    userId: '',
+    currency: 'INR',
+    timezone: defaultTimezone(),
+    monthlyBudget: '',
+    role: 'user',
+  }
+}
+
+function normalizeStoredSession(session) {
+  const fallback = emptySession()
+
+  if (!session || session.role === 'admin') {
+    return fallback
+  }
+
+  return {
+    ...fallback,
+    ...session,
+    role: session.role || 'user',
+  }
+}
+
+function ignoreNonAuthError(fallback) {
+  return (error) => {
+    if (error.status === 401 || error.status === 403) {
+      throw error
+    }
+
+    return fallback
+  }
+}
+
 function todayInput() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -453,16 +490,7 @@ async function apiRequest(path, options = {}, token) {
 
 function App() {
   const knownUsers = safeParse(USERS_KEY, {})
-  const rememberedSession = safeParse(SESSION_KEY, {
-    token: '',
-    email: '',
-    fullName: '',
-    userId: '',
-    currency: 'INR',
-    timezone: defaultTimezone(),
-    monthlyBudget: '',
-    role: 'user',
-  })
+  const rememberedSession = normalizeStoredSession(safeParse(SESSION_KEY, emptySession()))
 
   const [activeSection, setActiveSection] = useState('dashboard')
   const [authMode, setAuthMode] = useState('login')
@@ -636,10 +664,10 @@ function App() {
 
     try {
       const [overview, users, transactions, auditLogs] = await Promise.all([
-        apiRequest('/admin/overview', {}, session.token).catch(() => null),
-        apiRequest('/admin/users', {}, session.token).catch(() => []),
-        apiRequest('/admin/transactions', {}, session.token).catch(() => []),
-        apiRequest('/admin/audit-logs', {}, session.token).catch(() => []),
+        apiRequest('/admin/overview', {}, session.token).catch(ignoreNonAuthError(null)),
+        apiRequest('/admin/users', {}, session.token).catch(ignoreNonAuthError([])),
+        apiRequest('/admin/transactions', {}, session.token).catch(ignoreNonAuthError([])),
+        apiRequest('/admin/audit-logs', {}, session.token).catch(ignoreNonAuthError([])),
       ])
 
       startTransition(() => {
@@ -651,6 +679,22 @@ function App() {
         })
       })
     } catch (error) {
+      if (error.status === 401 || error.status === 403) {
+        const nextSession = emptySession()
+        setSession(nextSession)
+        sessionRef.current = nextSession
+        setAdminRecords({
+          overview: null,
+          users: [],
+          transactions: [],
+          auditLogs: [],
+        })
+        setAuthMode('admin')
+        setActiveSection('dashboard')
+        setErrorMessage('Admin session expired. Please sign in again.')
+        return
+      }
+
       setErrorMessage(error.message || 'Unable to load admin data right now.')
     } finally {
       setIsBusy(false)
@@ -821,9 +865,12 @@ function App() {
       return
     }
 
-    if (authMode === 'register' && !isOtpVerified) {
-      setErrorMessage('Verify OTP before creating your account.')
-      window.alert('Verify OTP before creating your account.')
+    if ((authMode === 'register' || authMode === 'forgot') && !isOtpVerified) {
+      const message = authMode === 'forgot'
+        ? 'Verify OTP before resetting your password.'
+        : 'Verify OTP before creating your account.'
+      setErrorMessage(message)
+      window.alert(message)
       return
     }
 
@@ -868,6 +915,26 @@ function App() {
           otp: '',
         })
         setStatusMessage('Account created successfully. Please sign in to continue.')
+      } else if (authMode === 'forgot') {
+        await apiRequest('/auth/password/reset', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: authForm.email,
+            otp: authForm.otp,
+            newPassword: authForm.password,
+          }),
+        })
+
+        setAuthMode('login')
+        setIsOtpSent(false)
+        setIsOtpVerified(false)
+        setAuthForm({
+          fullName: '',
+          email: authForm.email,
+          password: '',
+          otp: '',
+        })
+        setStatusMessage('Password reset successfully. Please sign in with your new password.')
       } else if (authMode === 'admin') {
         const adminSession = await apiRequest('/admin/login', {
           method: 'POST',
@@ -929,7 +996,7 @@ function App() {
         setErrorMessage('Wrong admin email or password.')
       } else {
         setErrorMessage(error.message || 'Authentication failed.')
-        if (authMode === 'register' && error.message) {
+        if ((authMode === 'register' || authMode === 'forgot') && error.message) {
           window.alert(error.message)
         }
       }
@@ -996,7 +1063,75 @@ function App() {
     }
   }
 
+  async function handleSendPasswordResetOtp() {
+    if (!authForm.email) {
+      setErrorMessage('Enter your email before sending OTP.')
+      window.alert('Enter your email before sending OTP.')
+      return
+    }
+
+    setIsOtpSending(true)
+    setErrorMessage('')
+    setStatusMessage('')
+
+    try {
+      await apiRequest('/auth/password/forgot/send-otp', {
+        method: 'POST',
+        body: JSON.stringify({ email: authForm.email }),
+      })
+      setIsOtpSent(true)
+      setIsOtpVerified(false)
+      setStatusMessage('Password reset OTP sent to your email. Please check your inbox.')
+      window.alert('Password reset OTP sent to your email. Please check your inbox.')
+    } catch (error) {
+      const message = error.message || 'Unable to send OTP.'
+      setErrorMessage(message)
+      window.alert(message)
+    } finally {
+      setIsOtpSending(false)
+    }
+  }
+
+  async function handleVerifyPasswordResetOtp() {
+    if (!authForm.email || !authForm.otp) {
+      setErrorMessage('Enter your email and OTP before verifying.')
+      window.alert('Enter your email and OTP before verifying.')
+      return
+    }
+
+    setIsOtpVerifying(true)
+    setErrorMessage('')
+    setStatusMessage('')
+
+    try {
+      await apiRequest('/auth/password/forgot/verify-otp', {
+        method: 'POST',
+        body: JSON.stringify({ email: authForm.email, otp: authForm.otp }),
+      })
+      setIsOtpVerified(true)
+      setStatusMessage('OTP verified. You can set a new password now.')
+      window.alert('OTP verified. You can set a new password now.')
+    } catch (error) {
+      const message = error.message || 'Wrong OTP. Please try again.'
+      setIsOtpVerified(false)
+      setErrorMessage(message)
+      window.alert(message)
+    } finally {
+      setIsOtpVerifying(false)
+    }
+  }
+
   function handleOtpAction() {
+    if (authMode === 'forgot') {
+      if (isOtpSent) {
+        handleVerifyPasswordResetOtp()
+        return
+      }
+
+      handleSendPasswordResetOtp()
+      return
+    }
+
     if (isOtpSent) {
       handleVerifyRegistrationOtp()
       return
@@ -2840,7 +2975,7 @@ function App() {
               <span>Email</span>
               <input type="email" value={authForm.email} onChange={(event) => updateAuthForm({ email: event.target.value }, { resetOtpSent: true })} required />
             </label>
-            {authMode === 'register' ? (
+            {authMode === 'register' || authMode === 'forgot' ? (
               <>
                 <label className={isOtpSent ? 'field otp-field' : 'field otp-field hidden'}>
                   <span>OTP</span>
@@ -2872,7 +3007,7 @@ function App() {
               </>
             ) : null}
             <label className="field">
-              <span>Password</span>
+              <span>{authMode === 'forgot' ? 'New password' : 'Password'}</span>
               <input
                 type="password"
                 value={authForm.password}
@@ -2882,9 +3017,27 @@ function App() {
                 required
               />
             </label>
-            <button type="submit" className="primary-button" disabled={isBusy || (authMode === 'register' && !isOtpVerified)}>
-              {isBusy ? 'Please wait...' : authMode === 'login' ? 'Sign in' : authMode === 'admin' ? 'Login' : 'Create account'}
+            <button type="submit" className="primary-button" disabled={isBusy || ((authMode === 'register' || authMode === 'forgot') && !isOtpVerified)}>
+              {isBusy
+                ? 'Please wait...'
+                : authMode === 'login'
+                  ? 'Sign in'
+                  : authMode === 'admin'
+                    ? 'Login'
+                    : authMode === 'forgot'
+                      ? 'Reset password'
+                      : 'Create account'}
             </button>
+            {authMode === 'login' ? (
+              <button type="button" className="auth-link-button" onClick={() => handleAuthModeChange('forgot')}>
+                Forgot password?
+              </button>
+            ) : null}
+            {authMode === 'forgot' ? (
+              <button type="button" className="auth-link-button" onClick={() => handleAuthModeChange('login')}>
+                Back to login
+              </button>
+            ) : null}
           </form>
           {statusMessage ? <div className="banner success">{statusMessage}</div> : null}
           {errorMessage ? <div className="banner error">{errorMessage}</div> : null}

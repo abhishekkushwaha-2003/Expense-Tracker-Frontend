@@ -255,6 +255,22 @@
   box-shadow: 0 16px 30px rgba(31, 122, 92, 0.24);
 }
 
+.auth-link-button {
+  border: none;
+  background: transparent;
+  color: #1f7a5c;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  justify-self: center;
+  padding: 2px 6px;
+}
+
+.auth-link-button:hover {
+  color: #14532d;
+  text-decoration: underline;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 280px 1fr;
