@@ -301,6 +301,20 @@ function isValidEmail(email) {
   return emailPolicy.test((email || '').trim())
 }
 
+function isGenericHttpErrorMessage(message, status) {
+  const genericMessages = {
+    400: 'Bad Request',
+    401: 'Unauthorized',
+    403: 'Forbidden',
+    404: 'Not Found',
+    409: 'Conflict',
+    500: 'Internal Server Error',
+    503: 'Service Unavailable',
+  }
+
+  return genericMessages[status] === message
+}
+
 function isUserActive(user) {
   if (typeof user?.isActive === 'boolean') {
     return user.isActive
@@ -462,7 +476,12 @@ async function apiRequest(path, options = {}, token) {
 
     try {
       const parsedError = JSON.parse(errorText)
-      message = parsedError.message || parsedError.error || message
+      const parsedMessage = parsedError.message || parsedError.reason || parsedError.detail || parsedError.error
+      if (parsedMessage && !isGenericHttpErrorMessage(parsedMessage, response.status)) {
+        message = parsedMessage
+      } else if (isGenericHttpErrorMessage(message, response.status)) {
+        message = `Request failed with ${response.status}`
+      }
     } catch {
       // Keep the original response text when the backend does not return JSON.
     }
@@ -994,6 +1013,8 @@ function App() {
         setErrorMessage('Wrong email or password.')
       } else if (authMode === 'admin' && (error.status === 401 || error.status === 403)) {
         setErrorMessage('Wrong admin email or password.')
+      } else if (authMode === 'admin' && error.status >= 500) {
+        setErrorMessage('Admin service is unavailable. Restart the API gateway and admin service, then try again.')
       } else {
         setErrorMessage(error.message || 'Authentication failed.')
         if ((authMode === 'register' || authMode === 'forgot') && error.message) {
@@ -1026,7 +1047,9 @@ function App() {
       setStatusMessage('OTP sent to your email. Please check your inbox.')
       window.alert('OTP sent to your email. Please check your inbox.')
     } catch (error) {
-      const message = error.message || 'Unable to send OTP.'
+      const message = error.status === 409
+        ? 'Email already registered.'
+        : error.message || 'Unable to send OTP.'
       setErrorMessage(message)
       window.alert(message)
     } finally {
