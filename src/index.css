@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+:root {
+  font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #21352f;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.86), rgba(255, 251, 235, 0.9) 46%, rgba(226, 232, 240, 0.76)),
+    #f6f1e6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme='dark'] {
+  color: #e8f4ef;
+  background:
+    linear-gradient(135deg, rgba(7, 31, 29, 0.98), rgba(9, 17, 32, 0.98) 56%, rgba(35, 27, 15, 0.94)),
+    #0b1518;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
