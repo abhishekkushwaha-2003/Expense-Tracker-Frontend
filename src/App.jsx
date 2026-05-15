@@ -976,7 +976,7 @@ function App() {
         setAccountLinkUserId('')
         setStatusMessage('Admin login successful. Dashboard is syncing now.')
       } else {
-        const token = await apiRequest('/auth/login', {
+        const loginResponse = await apiRequest('/auth/login', {
           method: 'POST',
           body: JSON.stringify({
             email: authForm.email,
@@ -984,22 +984,46 @@ function App() {
           }),
         })
 
-        const knownUser = knownUsers[authForm.email]
+        const normalizedEmail = authForm.email.trim().toLowerCase()
+        const token = typeof loginResponse === 'string' ? loginResponse : loginResponse.token
+        const knownUser = knownUsers[normalizedEmail] || knownUsers[authForm.email]
+        const userId = loginResponse.userId || knownUser?.userId || ''
+        const fullName = loginResponse.fullName || knownUser?.fullName || normalizedEmail.split('@')[0]
+        const currency = loginResponse.currency || knownUser?.currency || 'INR'
+        const timezone = loginResponse.timezone || knownUser?.timezone || defaultTimezone()
+        const monthlyBudget = loginResponse.monthlyBudget ?? knownUser?.monthlyBudget ?? ''
+
+        if (!token) {
+          throw new Error('Login response did not include an access token.')
+        }
+
+        const updatedKnownUsers = {
+          ...knownUsers,
+          [normalizedEmail]: {
+            userId,
+            fullName,
+            currency,
+            timezone,
+            monthlyBudget,
+          },
+        }
+
+        window.localStorage.setItem(USERS_KEY, JSON.stringify(updatedKnownUsers))
 
         setSession({
           token,
-          email: authForm.email,
-          userId: knownUser?.userId || '',
-          fullName: knownUser?.fullName || authForm.email.split('@')[0],
-          currency: knownUser?.currency || 'INR',
-          timezone: knownUser?.timezone || defaultTimezone(),
-          monthlyBudget: knownUser?.monthlyBudget || '',
+          email: normalizedEmail,
+          userId,
+          fullName,
+          currency,
+          timezone,
+          monthlyBudget,
           role: 'user',
         })
-        setAccountLinkUserId(knownUser?.userId ? String(knownUser.userId) : '')
-        setBudgetForm((current) => ({ ...current, currency: knownUser?.currency || 'INR' }))
+        setAccountLinkUserId(userId ? String(userId) : '')
+        setBudgetForm((current) => ({ ...current, currency }))
         setStatusMessage(
-          knownUser?.userId
+          userId
             ? 'Welcome back. Your dashboard is syncing now.'
             : 'Login worked. Add your user ID once so the app can fetch your data from the other services.',
         )
@@ -1412,10 +1436,38 @@ function App() {
         setStatusMessage('Budget created successfully.')
       }
 
-      setSession((current) => ({
-        ...current,
-        monthlyBudget: payload.monthlyLimit,
-      }))
+      const updatedUser = await apiRequest(`/auth/users/${session.userId}/preferences`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          monthlyBudget: payload.monthlyLimit,
+          currency: budgetForm.currency,
+        }),
+      }, session.token)
+
+      const nextMonthlyBudget = updatedUser.monthlyBudget ?? payload.monthlyLimit
+      const nextCurrency = updatedUser.currency || budgetForm.currency || session.currency || 'INR'
+
+      setSession((current) => {
+        const nextSession = {
+          ...current,
+          currency: nextCurrency,
+          monthlyBudget: nextMonthlyBudget,
+        }
+
+        const updatedKnownUsers = {
+          ...knownUsers,
+          [nextSession.email]: {
+            userId: nextSession.userId,
+            fullName: nextSession.fullName,
+            currency: nextSession.currency,
+            timezone: nextSession.timezone,
+            monthlyBudget: nextSession.monthlyBudget,
+          },
+        }
+
+        window.localStorage.setItem(USERS_KEY, JSON.stringify(updatedKnownUsers))
+        return nextSession
+      })
 
       setBudgetForm((current) => ({
         ...emptyBudgetForm,
@@ -2003,7 +2055,7 @@ function App() {
             <strong>{currencyFormat(overview.totalIncome || 0, currentCurrency)}</strong>
             <small>Platform-wide income</small>
           </article>
-          <article className="metric-card accent admin-metric-card">
+          <article className="metric-card admin-metric-card">
             <span>Average monthly spend</span>
             <strong>{currencyFormat(overview.averageMonthlySpendPerUser || 0, currentCurrency)}</strong>
             <small>Per user estimate</small>
@@ -2109,7 +2161,7 @@ function App() {
               <strong>{currencyFormat(balance, currentCurrency)}</strong>
               <small>{savingsRate.toFixed(1)}% savings rate</small>
             </article>
-            <article className="metric-card accent">
+            <article className="metric-card">
               <span>Health score</span>
               <strong>{financialHealthScore === null ? '--' : `${financialHealthScore}/100`}</strong>
               <small>
