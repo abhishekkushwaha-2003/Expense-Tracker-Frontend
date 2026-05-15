@@ -58,28 +58,36 @@ Expense-Tracker-Frontend/
 
 - Node.js
 - npm
-- SpendSmart backend running through the API Gateway on `http://localhost:8080`
+- SpendSmart backend running through the API Gateway on `http://127.0.0.1:18080` locally, or your deployed gateway URL in production
 
 ## Backend Connection
 
-The app uses this API base URL in `src/App.jsx`:
+The app resolves its API base URL in `src/App.jsx`:
 
 ```js
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+const API_BASE_URL = import.meta.env.DEV
+  ? '/api'
+  : import.meta.env.VITE_API_PROXY_TARGET || 'http://13.234.20.4:18080'
 ```
 
 During local development, `vite.config.js` proxies `/api` requests to the backend gateway:
 
 ```text
-/api -> http://127.0.0.1:8080
+/api -> VITE_API_PROXY_TARGET
 ```
 
 That means the frontend can call `/api/auth/login`, `/api/expenses`, `/api/income`, and other backend routes without hardcoding the gateway URL.
 
-If you deploy the frontend separately, set:
+For local development, set `.env` if your backend is not running on the default target:
 
 ```env
-VITE_API_BASE_URL=https://your-backend-gateway-url
+VITE_API_PROXY_TARGET=http://127.0.0.1:18080
+```
+
+For Vercel production, set this environment variable in the Vercel project settings:
+
+```env
+VITE_API_PROXY_TARGET=http://13.234.20.4:18080
 ```
 
 ## Installation
