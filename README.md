@@ -65,9 +65,7 @@ Expense-Tracker-Frontend/
 The app resolves its API base URL in `src/App.jsx`:
 
 ```js
-const API_BASE_URL = import.meta.env.DEV
-  ? '/api'
-  : import.meta.env.VITE_API_PROXY_TARGET || 'http://13.234.20.4:18080'
+const API_BASE_URL = '/api'
 ```
 
 During local development, `vite.config.js` proxies `/api` requests to the backend gateway:
@@ -78,16 +76,16 @@ During local development, `vite.config.js` proxies `/api` requests to the backen
 
 That means the frontend can call `/api/auth/login`, `/api/expenses`, `/api/income`, and other backend routes without hardcoding the gateway URL.
 
+In Vercel production, `vercel.json` rewrites `/api/*` to the deployed EC2 API Gateway:
+
+```text
+/api/* -> http://13.234.20.4:18080/*
+```
+
 For local development, set `.env` if your backend is not running on the default target:
 
 ```env
 VITE_API_PROXY_TARGET=http://127.0.0.1:18080
-```
-
-For Vercel production, set this environment variable in the Vercel project settings:
-
-```env
-VITE_API_PROXY_TARGET=http://13.234.20.4:18080
 ```
 
 ## Installation

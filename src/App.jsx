@@ -1,17 +1,7 @@
 ﻿import { startTransition, useDeferredValue, useEffect, useRef, useState } from 'react'
 import './App.css'
 
-const DEFAULT_PRODUCTION_API_URL = 'http://13.234.20.4:18080'
-
-function resolveApiBaseUrl() {
-  if (import.meta.env.DEV) {
-    return '/api'
-  }
-
-  return (import.meta.env.VITE_API_PROXY_TARGET || DEFAULT_PRODUCTION_API_URL).replace(/\/$/, '')
-}
-
-const API_BASE_URL = resolveApiBaseUrl()
+const API_BASE_URL = '/api'
 const SESSION_KEY = 'spendsmart.session'
 const USERS_KEY = 'spendsmart.known-users'
 const THEME_KEY = 'spendsmart.theme'
