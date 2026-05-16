@@ -1,7 +1,9 @@
 ﻿import { startTransition, useDeferredValue, useEffect, useRef, useState } from 'react'
 import './App.css'
 
-const API_BASE_URL = '/api'
+const API_BASE_URLS = import.meta.env.DEV
+  ? ['/api']
+  : [(import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')]
 const SESSION_KEY = 'spendsmart.session'
 const USERS_KEY = 'spendsmart.known-users'
 const THEME_KEY = 'spendsmart.theme'
@@ -465,10 +467,24 @@ async function apiRequest(path, options = {}, token) {
     headers.Authorization = `Bearer ${token}`
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  })
+  let response
+  let lastNetworkError
+
+  for (const baseUrl of API_BASE_URLS) {
+    try {
+      response = await fetch(`${baseUrl}${path}`, {
+        ...options,
+        headers,
+      })
+      break
+    } catch (error) {
+      lastNetworkError = error
+    }
+  }
+
+  if (!response) {
+    throw lastNetworkError || new Error('Backend is unavailable')
+  }
 
   if (!response.ok) {
     const errorText = await response.text()
@@ -1516,6 +1532,10 @@ function App() {
 
     try {
       await apiRequest(path, { method: 'DELETE' }, session.token)
+      const deletedCategoryId = path.match(/^\/categories\/(\d+)$/)?.[1]
+      if (deletedCategoryId && String(categoryForm.categoryId) === deletedCategoryId) {
+        setCategoryForm(emptyCategoryForm)
+      }
       setStatusMessage(successMessage)
       setRefreshToken((value) => value + 1)
     } catch (error) {

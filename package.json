@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:docker": "vite --mode docker",
+    "dev:sts": "vite --mode sts",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

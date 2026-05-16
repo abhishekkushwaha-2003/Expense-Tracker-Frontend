@@ -82,10 +82,16 @@ In Vercel production, `vercel.json` rewrites `/api/*` to the deployed EC2 API Ga
 /api/* -> http://13.234.20.4:18080/*
 ```
 
-For local development, set `.env` if your backend is not running on the default target:
+For Docker backend mode, use the gateway published by Docker Compose:
 
 ```env
 VITE_API_PROXY_TARGET=http://127.0.0.1:18080
+```
+
+For STS backend mode, use the gateway port from `api-gateway/src/main/resources/application.yml`:
+
+```env
+VITE_API_PROXY_TARGET=http://127.0.0.1:8080
 ```
 
 ## Installation
@@ -108,6 +114,13 @@ Then start the frontend:
 
 ```powershell
 npm run dev
+```
+
+Or choose the backend mode explicitly:
+
+```powershell
+npm run dev:docker
+npm run dev:sts
 ```
 
 Open:
